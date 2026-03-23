@@ -55,14 +55,12 @@ check_prerequisites() {
   section "Preflight checks"
   local missing=0
 
-  for cmd in docker; do
-    if command -v "$cmd" &>/dev/null; then
-      ok "$cmd found: $(command -v $cmd)"
-    else
-      error "$cmd not found — please install Docker Desktop"
-      missing=$((missing + 1))
-    fi
-  done
+  if command -v docker &>/dev/null; then
+    ok "docker found: $(command -v docker)"
+  else
+    error "docker not found — please install Docker Desktop"
+    missing=$((missing + 1))
+  fi
 
   # Check Docker is running
   if docker info &>/dev/null; then
@@ -147,10 +145,9 @@ wait_for_healthy() {
   )
   local max_wait=300
   local interval=10
-  local elapsed=0
-
   for svc in "${services[@]}"; do
     info "Waiting for $svc ..."
+    local elapsed=0
     while true; do
       local status
       status=$(docker inspect --format='{{.State.Health.Status}}' "$svc" 2>/dev/null || echo "missing")
@@ -171,7 +168,6 @@ wait_for_healthy() {
       elapsed=$((elapsed + interval))
       echo -n "."
     done
-    elapsed=0
   done
 }
 
@@ -223,7 +219,8 @@ run_smoke_test() {
 
   if echo "$response" | grep -q "nextUri\|data\|iceberg"; then
     ok "Trino SQL query succeeded"
-    echo "$response" | python3 -c "
+    if command -v python3 &>/dev/null; then
+      echo "$response" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -233,6 +230,7 @@ try:
     if rows: print('  Rows:', rows[:5])
 except: pass
 " 2>/dev/null || true
+    fi
   else
     warn "SQL query failed — Trino may still be starting. Try again in 60s."
   fi

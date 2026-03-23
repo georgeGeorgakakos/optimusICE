@@ -20,8 +20,8 @@ $ErrorActionPreference = "Stop"
 
 # ── Config ────────────────────────────────────────────────────────────────────
 $ScriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot     = (Resolve-Path "$ScriptDir\..\.." -ErrorAction SilentlyContinue)?.Path
-if (-not $RepoRoot) { $RepoRoot = "$ScriptDir\..\.." }
+$_resolved    = Resolve-Path "$ScriptDir\..\.." -ErrorAction SilentlyContinue
+$RepoRoot     = if ($_resolved) { $_resolved.Path } else { "$ScriptDir\..\.." }
 $ComposeFile  = "$ScriptDir\docker-compose.yml"
 $BridgeDir    = "$RepoRoot\bridge"
 $BridgeImage  = "optimusdb/zenoh-iceberg-bridge:0.1.0"
@@ -64,10 +64,15 @@ function Test-Prerequisites {
     }
 
     # Docker daemon running
-    try {
-        docker info 2>&1 | Out-Null
+    # Temporarily set Continue so docker info warnings don't throw under Stop preference
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    docker info 2>&1 | Out-Null
+    $daemonOk = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $prev
+    if ($daemonOk) {
         Write-Ok "Docker daemon is running"
-    } catch {
+    } else {
         Write-Err "Docker daemon not running — open Docker Desktop and wait for it to start"
         $ok = $false
     }

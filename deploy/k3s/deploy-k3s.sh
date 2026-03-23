@@ -146,13 +146,17 @@ run_smoke_test() {
   info "Testing Iceberg REST catalog (port-forward) ..."
   kubectl port-forward -n "$NAMESPACE" svc/iceberg-rest-catalog 8181:8181 &>/dev/null &
   local pf_pid=$!
+  # Use a subshell-safe cleanup: store PID in a temp var for the trap
+  local _cleanup_pid=$pf_pid
+  trap 'kill "$_cleanup_pid" 2>/dev/null || true; trap - RETURN' RETURN
   sleep 3
   if curl -sf "http://localhost:8181/v1/config" | grep -q "defaults"; then
     ok "Iceberg catalog responding"
   else
     warn "Iceberg catalog not yet ready"
   fi
-  kill $pf_pid 2>/dev/null || true
+  kill "$pf_pid" 2>/dev/null || true
+  trap - RETURN
 
   # Trino via NodePort
   info "Testing Trino coordinator via NodePort :30080 ..."

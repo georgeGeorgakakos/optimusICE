@@ -1,5 +1,3 @@
-version: "3.9"
-
 # iceberg-decentralized — Docker Desktop deployment
 #
 # Services (7):
@@ -56,14 +54,16 @@ services:
     environment:
       IPFS_PATH: /data/ipfs
     # Allow API access from all interfaces inside the network
-    command: >
-      sh -c "
-        ipfs init --profile=server 2>/dev/null || true &&
-        ipfs config Addresses.API /ip4/0.0.0.0/tcp/5001 &&
-        ipfs config Addresses.Gateway /ip4/0.0.0.0/tcp/8080 &&
-        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin '[\"*\"]' &&
-        ipfs daemon --migrate=true --enable-gc
-      "
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ipfs init --profile=server 2>/dev/null || true
+        ipfs config Addresses.API /ip4/0.0.0.0/tcp/5001
+        ipfs config Addresses.Gateway /ip4/0.0.0.0/tcp/8080
+        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin "[\"*\"]"
+        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods "[\"PUT\",\"POST\",\"GET\"]"
+        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Headers "[\"Authorization\"]"
+        exec ipfs daemon --migrate=true --enable-gc
     ports:
       - "5001:5001"   # API
       - "4001:4001"   # Swarm
@@ -73,7 +73,7 @@ services:
     networks:
       - iceberg-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:5001/api/v0/id"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:5001/api/v0/version"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -85,8 +85,6 @@ services:
     container_name: iceberg-zenoh
     restart: unless-stopped
     command:
-      - "--mode"
-      - "router"
       - "--rest-http-port"
       - "8000"
     ports:
@@ -107,9 +105,11 @@ services:
     container_name: iceberg-catalog
     restart: unless-stopped
     environment:
+      # Filesystem-backed catalog — no JDBC, no external metastore needed
       CATALOG_WAREHOUSE: /iceberg-warehouse
       CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
-      CATALOG_URI: http://iceberg-catalog:8181
+      # catalog-impl defaults to org.apache.iceberg.rest.RESTCatalog (HTTP)
+      # Do NOT set CATALOG_URI — it gets misused as a JDBC connection string
     ports:
       - "8181:8181"
     volumes:
@@ -138,14 +138,15 @@ services:
       - ./config/coordinator/jvm.config:/etc/trino/jvm.config:ro
       - ./config/coordinator/node.properties:/etc/trino/node.properties:ro
       - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+      - iceberg-warehouse:/iceberg-warehouse
     networks:
       - iceberg-net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 15
+      start_period: 120s
 
   # ── 5. Trino Worker 1 ─────────────────────────
   trino-worker-1:
@@ -160,14 +161,15 @@ services:
       - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
       - ./config/worker/node.properties:/etc/trino/node.properties:ro
       - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+      - iceberg-warehouse:/iceberg-warehouse
     networks:
       - iceberg-net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 15
+      start_period: 120s
 
   # ── 6. Trino Worker 2 ─────────────────────────
   trino-worker-2:
@@ -182,14 +184,15 @@ services:
       - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
       - ./config/worker/node.properties:/etc/trino/node.properties:ro
       - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+      - iceberg-warehouse:/iceberg-warehouse
     networks:
       - iceberg-net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 15
+      start_period: 120s
 
   # ── 7. Zenoh-Iceberg Bridge ───────────────────
   bridge:

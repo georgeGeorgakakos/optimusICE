@@ -1,4 +1,4 @@
-# iceberg-decentralized
+# OptimusICE a decentralized analytics Data Store
 
 > **A decentralized analytics platform** — Trino querying Apache Iceberg tables stored on IPFS, peers discovered via Zenoh, all wired together by a lightweight Go bridge service. Deployable on K3s with a single Helm command.
 
