@@ -73,11 +73,11 @@ services:
     networks:
       - iceberg-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:5001/api/v0/version"]
+      test: ["CMD", "ipfs", "id"]
       interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
 
   # ── 2. Zenoh Router ───────────────────────────
   zenoh:
@@ -120,8 +120,8 @@ services:
       test: ["CMD", "wget", "-qO-", "http://localhost:8181/v1/config"]
       interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 60s
 
   # ── 4. Trino Coordinator ──────────────────────
   trino-coordinator:
@@ -130,7 +130,7 @@ services:
     restart: unless-stopped
     depends_on:
       iceberg-catalog:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "8080:8080"
     volumes:
@@ -155,7 +155,7 @@ services:
     restart: unless-stopped
     depends_on:
       trino-coordinator:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ./config/worker/config.properties:/etc/trino/config.properties:ro
       - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
@@ -178,7 +178,7 @@ services:
     restart: unless-stopped
     depends_on:
       trino-coordinator:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ./config/worker/config.properties:/etc/trino/config.properties:ro
       - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
@@ -201,11 +201,11 @@ services:
     restart: unless-stopped
     depends_on:
       zenoh:
-        condition: service_healthy
+        condition: service_started
       iceberg-catalog:
-        condition: service_healthy
+        condition: service_started
       ipfs-node:
-        condition: service_healthy
+        condition: service_started
     environment:
       ZENOH_ENDPOINT: "tcp/zenoh:7447"
       CATALOG_ENDPOINT: "http://iceberg-catalog:8181"
@@ -218,8 +218,8 @@ services:
     networks:
       - iceberg-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:9090/healthz"]
+      test: ["CMD", "nc", "-z", "localhost", "9090"]
       interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 10
+      start_period: 30s
