@@ -1,0 +1,701 @@
+# =============================================================================
+# iceberg-decentralized — K3s Raw Manifest
+# =============================================================================
+# Complete e2e deployment: 19 Kubernetes resources, no Helm required.
+#
+# Deploy:   kubectl apply -f k3s-manifest.yaml
+# Teardown: kubectl delete -f k3s-manifest.yaml
+#
+# Prerequisites:
+#   - K3s running with local-path provisioner (default)
+#   - Bridge image built and imported:
+#       docker build -t optimusdb/zenoh-iceberg-bridge:0.1.0 ./bridge
+#       docker save optimusdb/zenoh-iceberg-bridge:0.1.0 | k3s ctr images import -
+#
+# After apply, verify:
+#   kubectl get pods -n iceberg-decentralized -w
+#   kubectl logs -n iceberg-decentralized deploy/zenoh-iceberg-bridge -f
+# =============================================================================
+
+# ─────────────────────────────────────────────
+# 1. Namespace
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iceberg-decentralized
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/name: iceberg-decentralized
+
+---
+# ─────────────────────────────────────────────
+# 2. PVC — Iceberg warehouse metadata (10Gi)
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: iceberg-metadata
+  namespace: iceberg-decentralized
+  labels:
+    app.kubernetes.io/name: iceberg-decentralized
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# ─────────────────────────────────────────────
+# 3. PVC — IPFS block store (20Gi)
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ipfs-data
+  namespace: iceberg-decentralized
+  labels:
+    app.kubernetes.io/name: iceberg-decentralized
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# ─────────────────────────────────────────────
+# 4. ConfigMap — Trino coordinator config
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-coordinator-config
+  namespace: iceberg-decentralized
+  labels:
+    app: trino-coordinator
+    app.kubernetes.io/name: iceberg-decentralized
+data:
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=false
+    http-server.http.port=8080
+    discovery-server.enabled=true
+    discovery.uri=http://trino-coordinator:8080
+    query.max-memory=6GB
+    query.max-memory-per-node=2GB
+  jvm.config: |
+    -server
+    -Xmx1600M
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+    -Djdk.attach.allowAttachSelf=true
+  node.properties: |
+    node.environment=production
+    node.id=coordinator
+    node.data-dir=/data/trino
+
+---
+# ─────────────────────────────────────────────
+# 5. ConfigMap — Trino worker config
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-worker-config
+  namespace: iceberg-decentralized
+  labels:
+    app: trino-worker
+    app.kubernetes.io/name: iceberg-decentralized
+data:
+  config.properties: |
+    coordinator=false
+    http-server.http.port=8080
+    discovery.uri=http://trino-coordinator:8080
+    query.max-memory=6GB
+    query.max-memory-per-node=2GB
+  jvm.config: |
+    -server
+    -Xmx3200M
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+    -Djdk.attach.allowAttachSelf=true
+  node.properties: |
+    node.environment=production
+    node.data-dir=/data/trino
+
+---
+# ─────────────────────────────────────────────
+# 6. ConfigMap — Iceberg catalog connector
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalog-iceberg
+  namespace: iceberg-decentralized
+  labels:
+    app.kubernetes.io/name: iceberg-decentralized
+    component: catalog
+data:
+  iceberg.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri=http://iceberg-rest-catalog:8181
+    iceberg.file-format=PARQUET
+    iceberg.compression-codec=ZSTD
+
+---
+# ─────────────────────────────────────────────
+# 7. Deployment — IPFS Node
+# ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipfs-node
+  namespace: iceberg-decentralized
+  labels:
+    app: ipfs
+    app.kubernetes.io/name: iceberg-decentralized
+    component: storage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ipfs
+  template:
+    metadata:
+      labels:
+        app: ipfs
+    spec:
+      initContainers:
+      - name: ipfs-init
+        image: ipfs/kubo:v0.26.0
+        command: ["ipfs", "init", "--profile=server"]
+        env:
+        - name: IPFS_PATH
+          value: /data/ipfs
+        volumeMounts:
+        - name: ipfs-data
+          mountPath: /data/ipfs
+      containers:
+      - name: ipfs
+        image: ipfs/kubo:v0.26.0
+        env:
+        - name: IPFS_PATH
+          value: /data/ipfs
+        args: ["daemon", "--migrate=true", "--enable-gc"]
+        ports:
+        - name: api
+          containerPort: 5001
+        - name: swarm
+          containerPort: 4001
+        - name: gateway
+          containerPort: 8080
+        volumeMounts:
+        - name: ipfs-data
+          mountPath: /data/ipfs
+        resources:
+          requests:
+            cpu: "0.5"
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        readinessProbe:
+          httpGet:
+            path: /api/v0/id
+            port: 5001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /api/v0/id
+            port: 5001
+          initialDelaySeconds: 30
+          periodSeconds: 20
+      volumes:
+      - name: ipfs-data
+        persistentVolumeClaim:
+          claimName: ipfs-data
+
+---
+# ─────────────────────────────────────────────
+# 8. Service — IPFS Node
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipfs-node
+  namespace: iceberg-decentralized
+  labels:
+    app: ipfs
+spec:
+  selector:
+    app: ipfs
+  ports:
+  - name: api
+    port: 5001
+    targetPort: api
+  - name: swarm
+    port: 4001
+    targetPort: swarm
+  - name: gateway
+    port: 8080
+    targetPort: gateway
+
+---
+# ─────────────────────────────────────────────
+# 9. Deployment — Zenoh Router
+# ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenoh
+  namespace: iceberg-decentralized
+  labels:
+    app: zenoh
+    app.kubernetes.io/name: iceberg-decentralized
+    component: messaging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenoh
+  template:
+    metadata:
+      labels:
+        app: zenoh
+    spec:
+      containers:
+      - name: zenoh
+        image: eclipse/zenoh:0.11.0
+        args:
+        - "--mode"
+        - "router"
+        - "--rest-http-port"
+        - "8000"
+        ports:
+        - name: zenoh
+          containerPort: 7447
+        - name: rest
+          containerPort: 8000
+        resources:
+          requests:
+            cpu: "0.25"
+            memory: 128Mi
+          limits:
+            cpu: "0.5"
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /@/router/local
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /@/router/local
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+
+---
+# ─────────────────────────────────────────────
+# 10. Service — Zenoh
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenoh
+  namespace: iceberg-decentralized
+  labels:
+    app: zenoh
+spec:
+  selector:
+    app: zenoh
+  ports:
+  - name: zenoh
+    port: 7447
+    targetPort: zenoh
+  - name: rest
+    port: 8000
+    targetPort: rest
+
+---
+# ─────────────────────────────────────────────
+# 11. Deployment — Iceberg REST Catalog
+# ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iceberg-rest-catalog
+  namespace: iceberg-decentralized
+  labels:
+    app: iceberg-rest-catalog
+    app.kubernetes.io/name: iceberg-decentralized
+    component: catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iceberg-rest-catalog
+  template:
+    metadata:
+      labels:
+        app: iceberg-rest-catalog
+    spec:
+      containers:
+      - name: iceberg-rest
+        image: tabulario/iceberg-rest:0.10.0
+        env:
+        - name: CATALOG_WAREHOUSE
+          value: /iceberg-warehouse
+        - name: CATALOG_IO__IMPL
+          value: org.apache.iceberg.hadoop.HadoopFileIO
+        - name: CATALOG_URI
+          value: "http://iceberg-rest-catalog:8181"
+        ports:
+        - name: http
+          containerPort: 8181
+        volumeMounts:
+        - name: iceberg-warehouse
+          mountPath: /iceberg-warehouse
+        resources:
+          requests:
+            cpu: "0.5"
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        readinessProbe:
+          httpGet:
+            path: /v1/config
+            port: 8181
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /v1/config
+            port: 8181
+          initialDelaySeconds: 20
+          periodSeconds: 20
+      volumes:
+      - name: iceberg-warehouse
+        persistentVolumeClaim:
+          claimName: iceberg-metadata
+
+---
+# ─────────────────────────────────────────────
+# 12. Service — Iceberg REST Catalog
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: iceberg-rest-catalog
+  namespace: iceberg-decentralized
+  labels:
+    app: iceberg-rest-catalog
+spec:
+  selector:
+    app: iceberg-rest-catalog
+  ports:
+  - name: http
+    port: 8181
+    targetPort: http
+
+---
+# ─────────────────────────────────────────────
+# 13. Deployment — Trino Coordinator
+# ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-coordinator
+  namespace: iceberg-decentralized
+  labels:
+    app: trino-coordinator
+    app.kubernetes.io/name: iceberg-decentralized
+    component: query-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trino-coordinator
+  template:
+    metadata:
+      labels:
+        app: trino-coordinator
+    spec:
+      containers:
+      - name: trino
+        image: trinodb/trino:435
+        ports:
+        - name: http
+          containerPort: 8080
+        volumeMounts:
+        - name: coordinator-config
+          mountPath: /etc/trino/config.properties
+          subPath: config.properties
+        - name: coordinator-config
+          mountPath: /etc/trino/jvm.config
+          subPath: jvm.config
+        - name: coordinator-config
+          mountPath: /etc/trino/node.properties
+          subPath: node.properties
+        - name: catalog-iceberg
+          mountPath: /etc/trino/catalog/iceberg.properties
+          subPath: iceberg.properties
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+        readinessProbe:
+          httpGet:
+            path: /v1/info
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /v1/info
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 20
+      volumes:
+      - name: coordinator-config
+        configMap:
+          name: trino-coordinator-config
+      - name: catalog-iceberg
+        configMap:
+          name: trino-catalog-iceberg
+
+---
+# ─────────────────────────────────────────────
+# 14. Service — Trino Coordinator (ClusterIP)
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-coordinator
+  namespace: iceberg-decentralized
+  labels:
+    app: trino-coordinator
+spec:
+  selector:
+    app: trino-coordinator
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+
+---
+# ─────────────────────────────────────────────
+# 15. Service — Trino Coordinator (NodePort :30080)
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-coordinator-external
+  namespace: iceberg-decentralized
+  labels:
+    app: trino-coordinator
+spec:
+  type: NodePort
+  selector:
+    app: trino-coordinator
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    nodePort: 30080
+
+---
+# ─────────────────────────────────────────────
+# 16. Deployment — Trino Workers
+# ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-worker
+  namespace: iceberg-decentralized
+  labels:
+    app: trino-worker
+    app.kubernetes.io/name: iceberg-decentralized
+    component: query-engine
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trino-worker
+  template:
+    metadata:
+      labels:
+        app: trino-worker
+    spec:
+      containers:
+      - name: trino
+        image: trinodb/trino:435
+        ports:
+        - name: http
+          containerPort: 8080
+        volumeMounts:
+        - name: worker-config
+          mountPath: /etc/trino/config.properties
+          subPath: config.properties
+        - name: worker-config
+          mountPath: /etc/trino/jvm.config
+          subPath: jvm.config
+        - name: worker-config
+          mountPath: /etc/trino/node.properties
+          subPath: node.properties
+        - name: catalog-iceberg
+          mountPath: /etc/trino/catalog/iceberg.properties
+          subPath: iceberg.properties
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi
+        readinessProbe:
+          httpGet:
+            path: /v1/info
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /v1/info
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 20
+      volumes:
+      - name: worker-config
+        configMap:
+          name: trino-worker-config
+      - name: catalog-iceberg
+        configMap:
+          name: trino-catalog-iceberg
+
+---
+# ─────────────────────────────────────────────
+# 17. Service — Trino Workers (headless)
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-worker
+  namespace: iceberg-decentralized
+  labels:
+    app: trino-worker
+spec:
+  clusterIP: None
+  selector:
+    app: trino-worker
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+
+---
+# ─────────────────────────────────────────────
+# 18. Deployment — Zenoh-Iceberg Bridge
+# ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenoh-iceberg-bridge
+  namespace: iceberg-decentralized
+  labels:
+    app: zenoh-iceberg-bridge
+    app.kubernetes.io/name: iceberg-decentralized
+    component: bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenoh-iceberg-bridge
+  template:
+    metadata:
+      labels:
+        app: zenoh-iceberg-bridge
+    spec:
+      containers:
+      - name: bridge
+        image: optimusdb/zenoh-iceberg-bridge:0.1.0
+        env:
+        - name: ZENOH_ENDPOINT
+          value: "tcp/zenoh:7447"
+        - name: CATALOG_ENDPOINT
+          value: "http://iceberg-rest-catalog:8181"
+        - name: IPFS_API
+          value: "http://ipfs-node:5001"
+        - name: SYNC_INTERVAL_SECONDS
+          value: "30"
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: METRICS_PORT
+          value: "9090"
+        ports:
+        - name: metrics
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: "0.25"
+            memory: 128Mi
+          limits:
+            cpu: "0.5"
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 20
+          periodSeconds: 20
+
+---
+# ─────────────────────────────────────────────
+# 19. Service — Bridge metrics
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenoh-iceberg-bridge
+  namespace: iceberg-decentralized
+  labels:
+    app: zenoh-iceberg-bridge
+spec:
+  selector:
+    app: zenoh-iceberg-bridge
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics

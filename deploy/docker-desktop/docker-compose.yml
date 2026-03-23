@@ -1,0 +1,222 @@
+version: "3.9"
+
+# iceberg-decentralized — Docker Desktop deployment
+#
+# Services (7):
+#   1. ipfs-node          — IPFS Kubo, content-addressed storage
+#   2. zenoh              — Zenoh router, peer discovery & gossip
+#   3. iceberg-catalog    — Iceberg REST catalog, table registry
+#   4. trino-coordinator  — Trino coordinator, SQL entry point  (:8080 → localhost:8080)
+#   5. trino-worker-1     — Trino worker
+#   6. trino-worker-2     — Trino worker
+#   7. bridge             — Zenoh-Iceberg bridge (the glue)
+#
+# Ports exposed to host:
+#   localhost:8080  → Trino SQL (DBeaver, Jupyter, trino-cli)
+#   localhost:8181  → Iceberg REST catalog
+#   localhost:5001  → IPFS API
+#   localhost:8888  → IPFS Gateway
+#   localhost:7447  → Zenoh protocol
+#   localhost:9090  → Bridge Prometheus metrics
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f bridge
+#   docker compose down -v   # removes volumes too
+
+networks:
+  iceberg-net:
+    driver: bridge
+    name: iceberg-decentralized
+
+volumes:
+  ipfs-data:
+    name: iceberg-ipfs-data
+  iceberg-warehouse:
+    name: iceberg-warehouse
+
+# ─────────────────────────────────────────────
+# Shared Trino config via extension fields
+# ─────────────────────────────────────────────
+x-trino-catalog: &trino-catalog
+  iceberg.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri=http://iceberg-catalog:8181
+    iceberg.file-format=PARQUET
+    iceberg.compression-codec=ZSTD
+
+services:
+
+  # ── 1. IPFS Node ──────────────────────────────
+  ipfs-node:
+    image: ipfs/kubo:v0.26.0
+    container_name: iceberg-ipfs
+    restart: unless-stopped
+    environment:
+      IPFS_PATH: /data/ipfs
+    # Allow API access from all interfaces inside the network
+    command: >
+      sh -c "
+        ipfs init --profile=server 2>/dev/null || true &&
+        ipfs config Addresses.API /ip4/0.0.0.0/tcp/5001 &&
+        ipfs config Addresses.Gateway /ip4/0.0.0.0/tcp/8080 &&
+        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin '[\"*\"]' &&
+        ipfs daemon --migrate=true --enable-gc
+      "
+    ports:
+      - "5001:5001"   # API
+      - "4001:4001"   # Swarm
+      - "8888:8080"   # Gateway (mapped to 8888 to avoid Trino collision)
+    volumes:
+      - ipfs-data:/data/ipfs
+    networks:
+      - iceberg-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5001/api/v0/id"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── 2. Zenoh Router ───────────────────────────
+  zenoh:
+    image: eclipse/zenoh:0.11.0
+    container_name: iceberg-zenoh
+    restart: unless-stopped
+    command:
+      - "--mode"
+      - "router"
+      - "--rest-http-port"
+      - "8000"
+    ports:
+      - "7447:7447"   # Zenoh protocol
+      - "8000:8000"   # Zenoh REST API
+    networks:
+      - iceberg-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/@/router/local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── 3. Iceberg REST Catalog ───────────────────
+  iceberg-catalog:
+    image: tabulario/iceberg-rest:0.10.0
+    container_name: iceberg-catalog
+    restart: unless-stopped
+    environment:
+      CATALOG_WAREHOUSE: /iceberg-warehouse
+      CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
+      CATALOG_URI: http://iceberg-catalog:8181
+    ports:
+      - "8181:8181"
+    volumes:
+      - iceberg-warehouse:/iceberg-warehouse
+    networks:
+      - iceberg-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8181/v1/config"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── 4. Trino Coordinator ──────────────────────
+  trino-coordinator:
+    image: trinodb/trino:435
+    container_name: iceberg-trino-coordinator
+    restart: unless-stopped
+    depends_on:
+      iceberg-catalog:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/coordinator/config.properties:/etc/trino/config.properties:ro
+      - ./config/coordinator/jvm.config:/etc/trino/jvm.config:ro
+      - ./config/coordinator/node.properties:/etc/trino/node.properties:ro
+      - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    networks:
+      - iceberg-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ── 5. Trino Worker 1 ─────────────────────────
+  trino-worker-1:
+    image: trinodb/trino:435
+    container_name: iceberg-trino-worker-1
+    restart: unless-stopped
+    depends_on:
+      trino-coordinator:
+        condition: service_healthy
+    volumes:
+      - ./config/worker/config.properties:/etc/trino/config.properties:ro
+      - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
+      - ./config/worker/node.properties:/etc/trino/node.properties:ro
+      - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    networks:
+      - iceberg-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ── 6. Trino Worker 2 ─────────────────────────
+  trino-worker-2:
+    image: trinodb/trino:435
+    container_name: iceberg-trino-worker-2
+    restart: unless-stopped
+    depends_on:
+      trino-coordinator:
+        condition: service_healthy
+    volumes:
+      - ./config/worker/config.properties:/etc/trino/config.properties:ro
+      - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
+      - ./config/worker/node.properties:/etc/trino/node.properties:ro
+      - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    networks:
+      - iceberg-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ── 7. Zenoh-Iceberg Bridge ───────────────────
+  bridge:
+    image: optimusdb/zenoh-iceberg-bridge:0.1.0
+    container_name: iceberg-bridge
+    restart: unless-stopped
+    depends_on:
+      zenoh:
+        condition: service_healthy
+      iceberg-catalog:
+        condition: service_healthy
+      ipfs-node:
+        condition: service_healthy
+    environment:
+      ZENOH_ENDPOINT: "tcp/zenoh:7447"
+      CATALOG_ENDPOINT: "http://iceberg-catalog:8181"
+      IPFS_API: "http://ipfs-node:5001"
+      SYNC_INTERVAL_SECONDS: "30"
+      NODE_ID: "docker-desktop-node"
+      METRICS_PORT: "9090"
+    ports:
+      - "9090:9090"   # Bridge Prometheus metrics
+    networks:
+      - iceberg-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
