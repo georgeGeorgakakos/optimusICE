@@ -174,7 +174,7 @@ function Wait-ForHealthy {
 
     foreach ($svc in $services) {
         Write-Info "Waiting for $svc ..."
-        $maxWait = 300
+        $maxWait = 100
         $interval = 10
         $elapsed = 0
 
