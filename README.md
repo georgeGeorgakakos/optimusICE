@@ -473,4 +473,4 @@ MIT — see [LICENSE](LICENSE).
 ---
 
 > Built as part of the [OptimusDB](https://github.com/optimusdb/optimusdb) research stack.  
-> Research affiliation: AUEB / ICCS-NTUA, Swarmchestrate Project (Grant #101135012).
+> Research affiliation: ICCS-NTUA, Swarmchestrate Project (Grant #101135012).
