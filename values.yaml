@@ -1,0 +1,103 @@
+namespace: iceberg-decentralized
+
+iceberg:
+  storage:
+    size: 10Gi
+    storageClassName: local-path   # K3s default; override for multi-node
+    accessMode: ReadWriteOnce
+
+ipfs:
+  enable: true
+  image: ipfs/kubo:v0.26.0
+  storage:
+    size: 20Gi
+    storageClassName: local-path
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  service:
+    apiPort: 5001
+    swarmPort: 4001
+    gatewayPort: 8080
+
+zenoh:
+  enable: true
+  image: eclipse/zenoh:0.11.0
+  # router = relay node for cross-host routing; peer = direct only
+  mode: router
+  resources:
+    requests:
+      cpu: "0.25"
+      memory: 128Mi
+    limits:
+      cpu: "0.5"
+      memory: 256Mi
+  service:
+    port: 7447
+
+icebergRestCatalog:
+  enable: true
+  image: tabulario/iceberg-rest:0.10.0
+  warehouse: /iceberg-warehouse   # maps to PVC mount
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  service:
+    port: 8181
+
+trino:
+  image: trinodb/trino:435
+  coordinator:
+    replicas: 1
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  workers:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+  service:
+    port: 8080
+  # Exposed externally via NodePort for DBeaver / OptimusDDC
+  nodePort:
+    enable: true
+    port: 30080
+  config:
+    # heap = ~80% of memory request
+    jvmHeapCoordinator: 1600M
+    jvmHeapWorker: 3200M
+    queryMaxMemory: 6GB
+    queryMaxMemoryPerNode: 2GB
+
+# Zenoh-Iceberg bridge sidecar (custom Go service)
+bridge:
+  enable: true
+  image: optimusdb/zenoh-iceberg-bridge:0.1.0
+  zenohEndpoint: "tcp/zenoh:7447"
+  catalogEndpoint: "http://iceberg-rest-catalog:8181"
+  ipfsApi: "http://ipfs-node:5001"
+  syncIntervalSeconds: 30
+  resources:
+    requests:
+      cpu: "0.25"
+      memory: 128Mi
+    limits:
+      cpu: "0.5"
+      memory: 256Mi

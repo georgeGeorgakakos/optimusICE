@@ -1,0 +1,88 @@
+---
+# Trino coordinator config.properties
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-coordinator-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: trino-coordinator
+    app.kubernetes.io/name: iceberg-decentralized
+data:
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=false
+    http-server.http.port={{ .Values.trino.service.port }}
+    discovery-server.enabled=true
+    discovery.uri=http://trino-coordinator:{{ .Values.trino.service.port }}
+    query.max-memory={{ .Values.trino.config.queryMaxMemory }}
+    query.max-memory-per-node={{ .Values.trino.config.queryMaxMemoryPerNode }}
+
+  jvm.config: |
+    -server
+    -Xmx{{ .Values.trino.config.jvmHeapCoordinator }}
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+    -Djdk.attach.allowAttachSelf=true
+
+  node.properties: |
+    node.environment=production
+    node.id={{ "coordinator" }}
+    node.data-dir=/data/trino
+
+---
+# Trino worker config.properties
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-worker-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: trino-worker
+    app.kubernetes.io/name: iceberg-decentralized
+data:
+  config.properties: |
+    coordinator=false
+    http-server.http.port={{ .Values.trino.service.port }}
+    discovery.uri=http://trino-coordinator:{{ .Values.trino.service.port }}
+    query.max-memory={{ .Values.trino.config.queryMaxMemory }}
+    query.max-memory-per-node={{ .Values.trino.config.queryMaxMemoryPerNode }}
+
+  jvm.config: |
+    -server
+    -Xmx{{ .Values.trino.config.jvmHeapWorker }}
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+    -Djdk.attach.allowAttachSelf=true
+
+  node.properties: |
+    node.environment=production
+    node.data-dir=/data/trino
+
+---
+# Iceberg catalog connector — shared by coordinator and workers
+# Points to the REST catalog which tracks all Iceberg tables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalog-iceberg
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: iceberg-decentralized
+    component: catalog
+data:
+  iceberg.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri=http://iceberg-rest-catalog:{{ .Values.icebergRestCatalog.service.port }}
+    # All data files are content-addressed CIDs accessible via the IPFS gateway
+    iceberg.file-format=PARQUET
+    iceberg.compression-codec=ZSTD

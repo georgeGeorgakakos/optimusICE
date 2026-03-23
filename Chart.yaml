@@ -1,0 +1,15 @@
+apiVersion: v2
+description: A decentralized analytics platform with Trino, Iceberg, IPFS, and Zenoh
+name: iceberg-decentralized
+type: application
+version: 0.2.0
+appVersion: "trino-435/iceberg-1.4/ipfs-kubo-0.26/zenoh-0.11"
+keywords:
+  - trino
+  - iceberg
+  - ipfs
+  - zenoh
+  - decentralized
+  - analytics
+maintainers:
+  - name: OptimusDB Team

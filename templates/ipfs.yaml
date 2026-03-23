@@ -1,0 +1,102 @@
+{{- if .Values.ipfs.enable }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ipfs-data
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.iceberg.storage.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.ipfs.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipfs-node
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: ipfs
+    app.kubernetes.io/name: iceberg-decentralized
+    component: storage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ipfs
+  template:
+    metadata:
+      labels:
+        app: ipfs
+    spec:
+      initContainers:
+      - name: ipfs-init
+        image: {{ .Values.ipfs.image }}
+        command: ["ipfs", "init", "--profile=server"]
+        env:
+        - name: IPFS_PATH
+          value: /data/ipfs
+        volumeMounts:
+        - name: ipfs-data
+          mountPath: /data/ipfs
+      containers:
+      - name: ipfs
+        image: {{ .Values.ipfs.image }}
+        env:
+        - name: IPFS_PATH
+          value: /data/ipfs
+        args: ["daemon", "--migrate=true", "--enable-gc"]
+        ports:
+        - name: api
+          containerPort: {{ .Values.ipfs.service.apiPort }}
+        - name: swarm
+          containerPort: {{ .Values.ipfs.service.swarmPort }}
+        - name: gateway
+          containerPort: {{ .Values.ipfs.service.gatewayPort }}
+        volumeMounts:
+        - name: ipfs-data
+          mountPath: /data/ipfs
+        resources:
+{{ toYaml .Values.ipfs.resources | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /api/v0/id
+            port: {{ .Values.ipfs.service.apiPort }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /api/v0/id
+            port: {{ .Values.ipfs.service.apiPort }}
+          initialDelaySeconds: 30
+          periodSeconds: 20
+      volumes:
+      - name: ipfs-data
+        persistentVolumeClaim:
+          claimName: ipfs-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipfs-node
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: ipfs
+spec:
+  selector:
+    app: ipfs
+  ports:
+  - name: api
+    port: {{ .Values.ipfs.service.apiPort }}
+    targetPort: api
+  - name: swarm
+    port: {{ .Values.ipfs.service.swarmPort }}
+    targetPort: swarm
+  - name: gateway
+    port: {{ .Values.ipfs.service.gatewayPort }}
+    targetPort: gateway
+{{- end }}

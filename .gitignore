@@ -1,0 +1,22 @@
+# Build artifacts
+bridge/bridge-local
+bridge/bridge-arm64
+bridge/bridge-amd64
+*.tar.gz
+
+# Helm
+charts/
+.helm/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / overrides (never commit)
+values-secret.yaml
+values-prod.yaml

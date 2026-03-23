@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-coordinator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: trino-coordinator
+    app.kubernetes.io/name: iceberg-decentralized
+    component: query-engine
+spec:
+  replicas: {{ .Values.trino.coordinator.replicas }}
+  selector:
+    matchLabels:
+      app: trino-coordinator
+  template:
+    metadata:
+      labels:
+        app: trino-coordinator
+    spec:
+      containers:
+      - name: trino
+        image: {{ .Values.trino.image }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.trino.service.port }}
+        volumeMounts:
+        - name: coordinator-config
+          mountPath: /etc/trino/config.properties
+          subPath: config.properties
+        - name: coordinator-config
+          mountPath: /etc/trino/jvm.config
+          subPath: jvm.config
+        - name: coordinator-config
+          mountPath: /etc/trino/node.properties
+          subPath: node.properties
+        - name: catalog-iceberg
+          mountPath: /etc/trino/catalog/iceberg.properties
+          subPath: iceberg.properties
+        resources:
+{{ toYaml .Values.trino.coordinator.resources | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /v1/info
+            port: {{ .Values.trino.service.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /v1/info
+            port: {{ .Values.trino.service.port }}
+          initialDelaySeconds: 60
+          periodSeconds: 20
+      volumes:
+      - name: coordinator-config
+        configMap:
+          name: trino-coordinator-config
+      - name: catalog-iceberg
+        configMap:
+          name: trino-catalog-iceberg
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-coordinator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: trino-coordinator
+spec:
+  selector:
+    app: trino-coordinator
+  ports:
+  - name: http
+    port: {{ .Values.trino.service.port }}
+    targetPort: http
+{{- if .Values.trino.nodePort.enable }}
+---
+# NodePort for external access (DBeaver, OptimusDDC, Jupyter)
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-coordinator-external
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: trino-coordinator
+spec:
+  type: NodePort
+  selector:
+    app: trino-coordinator
+  ports:
+  - name: http
+    port: {{ .Values.trino.service.port }}
+    targetPort: http
+    nodePort: {{ .Values.trino.nodePort.port }}
+{{- end }}

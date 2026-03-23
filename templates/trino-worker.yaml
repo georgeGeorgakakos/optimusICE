@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-worker
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: trino-worker
+    app.kubernetes.io/name: iceberg-decentralized
+    component: query-engine
+spec:
+  replicas: {{ .Values.trino.workers.replicas }}
+  selector:
+    matchLabels:
+      app: trino-worker
+  template:
+    metadata:
+      labels:
+        app: trino-worker
+    spec:
+      containers:
+      - name: trino
+        image: {{ .Values.trino.image }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.trino.service.port }}
+        volumeMounts:
+        - name: worker-config
+          mountPath: /etc/trino/config.properties
+          subPath: config.properties
+        - name: worker-config
+          mountPath: /etc/trino/jvm.config
+          subPath: jvm.config
+        - name: worker-config
+          mountPath: /etc/trino/node.properties
+          subPath: node.properties
+        - name: catalog-iceberg
+          mountPath: /etc/trino/catalog/iceberg.properties
+          subPath: iceberg.properties
+        resources:
+{{ toYaml .Values.trino.workers.resources | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /v1/info
+            port: {{ .Values.trino.service.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /v1/info
+            port: {{ .Values.trino.service.port }}
+          initialDelaySeconds: 60
+          periodSeconds: 20
+      volumes:
+      - name: worker-config
+        configMap:
+          name: trino-worker-config
+      - name: catalog-iceberg
+        configMap:
+          name: trino-catalog-iceberg
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-worker
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: trino-worker
+spec:
+  clusterIP: None   # headless — coordinator discovers workers via DNS
+  selector:
+    app: trino-worker
+  ports:
+  - name: http
+    port: {{ .Values.trino.service.port }}
+    targetPort: http

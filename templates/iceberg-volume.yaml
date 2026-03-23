@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: iceberg-metadata
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: iceberg-decentralized
+    component: storage
+spec:
+  accessModes:
+    - {{ .Values.iceberg.storage.accessMode }}
+  storageClassName: {{ .Values.iceberg.storage.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.iceberg.storage.size }}

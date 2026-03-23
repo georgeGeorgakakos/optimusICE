@@ -1,0 +1,68 @@
+{{- if .Values.zenoh.enable }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenoh
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenoh
+    app.kubernetes.io/name: iceberg-decentralized
+    component: messaging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenoh
+  template:
+    metadata:
+      labels:
+        app: zenoh
+    spec:
+      containers:
+      - name: zenoh
+        image: {{ .Values.zenoh.image }}
+        # router mode enables cross-host peer relay
+        args:
+        - "--mode"
+        - "{{ .Values.zenoh.mode }}"
+        - "--rest-http-port"
+        - "8000"
+        ports:
+        - name: zenoh
+          containerPort: {{ .Values.zenoh.service.port }}
+        - name: rest
+          containerPort: 8000
+        resources:
+{{ toYaml .Values.zenoh.resources | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /@/router/local
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /@/router/local
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenoh
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenoh
+spec:
+  selector:
+    app: zenoh
+  ports:
+  - name: zenoh
+    port: {{ .Values.zenoh.service.port }}
+    targetPort: zenoh
+  - name: rest
+    port: 8000
+    targetPort: rest
+{{- end }}

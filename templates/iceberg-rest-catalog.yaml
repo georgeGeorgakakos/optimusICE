@@ -1,0 +1,73 @@
+{{- if .Values.icebergRestCatalog.enable }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iceberg-rest-catalog
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: iceberg-rest-catalog
+    app.kubernetes.io/name: iceberg-decentralized
+    component: catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iceberg-rest-catalog
+  template:
+    metadata:
+      labels:
+        app: iceberg-rest-catalog
+    spec:
+      containers:
+      - name: iceberg-rest
+        image: {{ .Values.icebergRestCatalog.image }}
+        env:
+        - name: CATALOG_WAREHOUSE
+          value: {{ .Values.icebergRestCatalog.warehouse }}
+        # Use local filesystem (PVC). For IPFS-backed storage, point to
+        # the IPFS gateway: http://ipfs-node:8080/ipfs/<CID>
+        - name: CATALOG_IO__IMPL
+          value: org.apache.iceberg.hadoop.HadoopFileIO
+        - name: CATALOG_URI
+          value: "http://iceberg-rest-catalog:{{ .Values.icebergRestCatalog.service.port }}"
+        ports:
+        - name: http
+          containerPort: {{ .Values.icebergRestCatalog.service.port }}
+        volumeMounts:
+        - name: iceberg-warehouse
+          mountPath: {{ .Values.icebergRestCatalog.warehouse }}
+        resources:
+{{ toYaml .Values.icebergRestCatalog.resources | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /v1/config
+            port: {{ .Values.icebergRestCatalog.service.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /v1/config
+            port: {{ .Values.icebergRestCatalog.service.port }}
+          initialDelaySeconds: 20
+          periodSeconds: 20
+      volumes:
+      - name: iceberg-warehouse
+        persistentVolumeClaim:
+          claimName: iceberg-metadata
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iceberg-rest-catalog
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: iceberg-rest-catalog
+spec:
+  selector:
+    app: iceberg-rest-catalog
+  ports:
+  - name: http
+    port: {{ .Values.icebergRestCatalog.service.port }}
+    targetPort: http
+{{- end }}

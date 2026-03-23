@@ -1,0 +1,90 @@
+{{- if .Values.bridge.enable }}
+---
+# Zenoh-Iceberg Bridge
+#
+# This is the key architectural component that was completely missing from
+# the original chart. It acts as the glue between the Zenoh mesh (peer
+# discovery & metadata gossip) and the Iceberg REST catalog (schema registry).
+#
+# Responsibilities:
+#   1. On startup: publish this node's Iceberg partition map into Zenoh
+#      under the key  iceberg/partitions/<namespace>/<table>/<partition>
+#   2. On interval: subscribe to Zenoh for remote partition announcements
+#      and register them into the local Iceberg REST catalog so that Trino
+#      can plan queries that span data held on other physical nodes.
+#   3. On IPFS CID resolution: verify that a data file CID announced by a
+#      remote peer is reachable via the local IPFS gateway before registering
+#      it, preventing phantom partitions from polluting the catalog.
+#
+# The bridge runs as a standalone Deployment (not a sidecar) so that it
+# can be scaled or restarted independently of Trino.
+#
+# Source: github.com/optimusdb/zenoh-iceberg-bridge (Go, MIT)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenoh-iceberg-bridge
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenoh-iceberg-bridge
+    app.kubernetes.io/name: iceberg-decentralized
+    component: bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenoh-iceberg-bridge
+  template:
+    metadata:
+      labels:
+        app: zenoh-iceberg-bridge
+    spec:
+      containers:
+      - name: bridge
+        image: {{ .Values.bridge.image }}
+        env:
+        - name: ZENOH_ENDPOINT
+          value: {{ .Values.bridge.zenohEndpoint | quote }}
+        - name: CATALOG_ENDPOINT
+          value: {{ .Values.bridge.catalogEndpoint | quote }}
+        - name: IPFS_API
+          value: {{ .Values.bridge.ipfsApi | quote }}
+        - name: SYNC_INTERVAL_SECONDS
+          value: {{ .Values.bridge.syncIntervalSeconds | quote }}
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        ports:
+        - name: metrics
+          containerPort: 9090   # Prometheus metrics endpoint
+        resources:
+{{ toYaml .Values.bridge.resources | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 20
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenoh-iceberg-bridge
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenoh-iceberg-bridge
+spec:
+  selector:
+    app: zenoh-iceberg-bridge
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+{{- end }}
