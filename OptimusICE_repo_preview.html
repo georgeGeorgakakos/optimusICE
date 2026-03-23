@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --blue: #58a6ff;
+    --blue-dim: #1f6feb;
+    --green: #3fb950;
+    --amber: #d29922;
+    --teal: #39c5cf;
+    --purple: #a371f7;
+    --coral: #f47067;
+    --mono: 'JetBrains Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--display);
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 0;
+  }
+
+  /* ── Header ── */
+  .repo-header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px 20px;
+  }
+
+  .repo-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .repo-icon {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--blue);
+    letter-spacing: -0.5px;
+  }
+
+  .repo-desc {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 14px;
+    max-width: 600px;
+  }
+
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid;
+    font-weight: 600;
+  }
+
+  .badge-helm   { color: #8ab4f8; border-color: #1f6feb; background: #0c1f3a; }
+  .badge-k8s    { color: #7ec8e3; border-color: #1d6170; background: #0a1e24; }
+  .badge-go     { color: #79d4e0; border-color: #1a5c66; background: #091a1d; }
+  .badge-mit    { color: #3fb950; border-color: #1a5c2a; background: #091a0e; }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 0 32px;
+    gap: 0;
+  }
+
+  .tab {
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color .15s;
+  }
+
+  .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--coral);
+  }
+
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* ── Main layout ── */
+  .main {
+    display: flex;
+    gap: 0;
+  }
+
+  .content {
+    flex: 1;
+    min-width: 0;
+    padding: 28px 32px;
+  }
+
+  .sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    padding: 24px 20px;
+  }
+
+  /* ── README sections ── */
+  .section {
+    margin-bottom: 40px;
+  }
+
+  .section-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.3px;
+  }
+
+  .section-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  /* ── Component table ── */
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+
+  .comp-table th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 6px 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+  }
+
+  .comp-table td {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .comp-table tr:nth-child(even) td { background: var(--bg2); }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  .pill-blue   { background: #0c1f3a; color: var(--blue); }
+  .pill-teal   { background: #0a1e24; color: var(--teal); }
+  .pill-amber  { background: #1a1200; color: var(--amber); }
+  .pill-purple { background: #160d24; color: var(--purple); }
+  .pill-green  { background: #091a0e; color: var(--green); }
+
+  /* ── Code block ── */
+  .code-block {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #c9d1d9;
+    overflow-x: auto;
+    margin-bottom: 12px;
+  }
+
+  .code-block .kw  { color: #ff7b72; }
+  .code-block .str { color: #a5d6ff; }
+  .code-block .cm  { color: #8b949e; }
+  .code-block .var { color: #79c0ff; }
+  .code-block .num { color: #f2cc60; }
+
+  /* ── Diagram containers ── */
+  .diagram-wrap {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+
+  .diagram-caption {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 10px;
+    font-style: italic;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar-section {
+    margin-bottom: 24px;
+  }
+
+  .sidebar-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .file-tree {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+
+  .file-tree .dir  { color: var(--blue); }
+  .file-tree .go   { color: var(--teal); }
+  .file-tree .yaml { color: var(--amber); }
+  .file-tree .md   { color: var(--text); }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.1;
+    letter-spacing: -1px;
+  }
+
+  .stat-lbl {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    margin-top: 2px;
+  }
+
+  /* ── Quick start steps ── */
+  .steps {
+    counter-reset: step;
+  }
+
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 16px;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    background: var(--blue-dim);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    color: #fff;
+    margin-top: 2px;
+  }
+
+  .step-body { flex: 1; min-width: 0; }
+  .step-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+
+  /* ── Alert boxes ── */
+  .alert {
+    border-left: 3px solid;
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    margin-bottom: 12px;
+    background: var(--bg3);
+  }
+
+  .alert-info { border-color: var(--blue); }
+  .alert-warn { border-color: var(--amber); }
+
+  .alert-title {
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 4px;
+  }
+
+  .alert-info .alert-title { color: var(--blue); }
+  .alert-warn .alert-title { color: var(--amber); }
+</style>
+</head>
+<body>
+
+<!-- Repo header -->
+<div class="repo-header">
+  <div class="repo-title">
+    <div class="repo-icon">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 010-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/></svg>
+    </div>
+    <h1>iceberg-decentralized</h1>
+  </div>
+  <p class="repo-desc">A decentralized analytics platform — Trino + Apache Iceberg + IPFS + Zenoh, wired by a Go bridge service. Deploy on K3s with a single Helm command.</p>
+  <div class="badges">
+    <span class="badge badge-helm">Helm 3.x</span>
+    <span class="badge badge-k8s">Kubernetes 1.25+</span>
+    <span class="badge badge-go">Go 1.22</span>
+    <span class="badge badge-mit">MIT License</span>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active">README</div>
+  <div class="tab">Code</div>
+  <div class="tab">Issues</div>
+  <div class="tab">Wiki</div>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Concept -->
+    <div class="section">
+      <div class="section-title">Concept</div>
+      <p class="section-subtitle">Traditional analytics stacks assume a single source of truth. This project doesn't.</p>
+
+      <table class="comp-table">
+        <thead>
+          <tr><th>Role</th><th>Technology</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Query engine</td>
+            <td><span class="pill pill-blue">Trino 435</span></td>
+            <td style="color:var(--muted)">Distributed SQL, Iceberg-native, federation-ready</td>
+          </tr>
+          <tr>
+            <td>Table format</td>
+            <td><span class="pill pill-purple">Apache Iceberg 1.4</span></td>
+            <td style="color:var(--muted)">ACID, time-travel, schema evolution, partition pruning</td>
+          </tr>
+          <tr>
+            <td>Content-addressed storage</td>
+            <td><span class="pill pill-teal">IPFS / Kubo 0.26</span></td>
+            <td style="color:var(--muted)">Data files referenced by CID — location-independent</td>
+          </tr>
+          <tr>
+            <td>Peer messaging</td>
+            <td><span class="pill pill-amber">Zenoh 0.11</span></td>
+            <td style="color:var(--muted)">Sub-ms pub/sub, works across NAT, edge-to-cloud</td>
+          </tr>
+          <tr>
+            <td>The glue</td>
+            <td><span class="pill pill-green">zenoh-iceberg-bridge (Go)</span></td>
+            <td style="color:var(--muted)">Publishes local partitions to Zenoh; pulls & verifies remote ones</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- System Architecture Diagram -->
+    <div class="section">
+      <div class="section-title">System Architecture</div>
+      <div class="diagram-wrap">
+        <svg width="100%" viewBox="0 0 680 480">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- External clients -->
+          <rect x="20" y="20" width="120" height="36" rx="6" fill="#0c1f3a" stroke="#1f6feb" stroke-width="0.5"/>
+          <text x="80" y="42" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="600" fill="#58a6ff">SQL Clients</text>
+
+          <!-- NodePort arrow -->
+          <line x1="140" y1="38" x2="192" y2="65" stroke="#58a6ff" stroke-width="1" marker-end="url(#arr)" stroke-dasharray="4 3" opacity="0.8"/>
+          <text x="155" y="48" font-family="Syne,sans-serif" font-size="9" fill="#58a6ff" opacity="0.7">:30080</text>
+
+          <!-- ── Query Layer ── -->
+          <rect x="180" y="50" width="310" height="110" rx="10" fill="#0c1f3a" stroke="#1f6feb" stroke-width="0.5"/>
+          <text x="195" y="68" font-family="Syne,sans-serif" font-size="10" fill="#1f6feb" font-weight="600" opacity="0.8">QUERY LAYER</text>
+
+          <!-- Coordinator -->
+          <rect x="192" y="76" width="128" height="72" rx="6" fill="#0d1117" stroke="#388bfd" stroke-width="1"/>
+          <text x="256" y="97" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="700" fill="#58a6ff">Trino Coordinator</text>
+          <text x="256" y="112" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">trinodb/trino:435</text>
+          <text x="256" y="125" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#388bfd">port :8080</text>
+          <text x="256" y="139" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#388bfd">NodePort :30080</text>
+
+          <!-- Workers -->
+          <rect x="338" y="76" width="140" height="34" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="0.5"/>
+          <text x="408" y="97" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" fill="#c9d1d9">Worker 1  &amp;  Worker 2</text>
+
+          <rect x="338" y="118" width="140" height="32" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="0.5"/>
+          <text x="408" y="136" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">replicas: 2</text>
+          <text x="408" y="146" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">4cpu / 8Gi each</text>
+
+          <!-- Coordinator → Workers -->
+          <line x1="320" y1="104" x2="337" y2="95" stroke="#30363d" stroke-width="0.5" marker-end="url(#arr)"/>
+          <line x1="320" y1="120" x2="337" y2="133" stroke="#30363d" stroke-width="0.5" marker-end="url(#arr)"/>
+
+          <!-- ── Catalog Layer ── -->
+          <rect x="180" y="175" width="200" height="80" rx="10" fill="#160d24" stroke="#6e40c9" stroke-width="0.5"/>
+          <text x="195" y="192" font-family="Syne,sans-serif" font-size="10" fill="#6e40c9" font-weight="600" opacity="0.8">CATALOG LAYER</text>
+          <rect x="192" y="200" width="176" height="44" rx="6" fill="#0d1117" stroke="#a371f7" stroke-width="0.8"/>
+          <text x="280" y="217" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="700" fill="#a371f7">Iceberg REST Catalog</text>
+          <text x="280" y="231" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">tabulario/iceberg-rest  :8181</text>
+          <text x="280" y="243" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#6e40c9">PVC: iceberg-metadata</text>
+
+          <!-- Coordinator → Catalog -->
+          <line x1="256" y1="148" x2="256" y2="199" stroke="#a371f7" stroke-width="0.5" marker-end="url(#arr)"/>
+
+          <!-- ── Storage Layer ── -->
+          <rect x="180" y="270" width="200" height="80" rx="10" fill="#0a1e24" stroke="#1d6170" stroke-width="0.5"/>
+          <text x="195" y="287" font-family="Syne,sans-serif" font-size="10" fill="#1d6170" font-weight="600" opacity="0.8">STORAGE LAYER</text>
+          <rect x="192" y="294" width="176" height="44" rx="6" fill="#0d1117" stroke="#39c5cf" stroke-width="0.8"/>
+          <text x="280" y="311" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="700" fill="#39c5cf">IPFS Node (Kubo)</text>
+          <text x="280" y="325" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">API :5001  Swarm :4001</text>
+          <text x="280" y="337" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#1d6170">PVC: ipfs-data 20Gi</text>
+
+          <!-- Catalog → IPFS (warehouse on PVC, not direct) -->
+          <line x1="280" y1="255" x2="280" y2="293" stroke="#30363d" stroke-width="0.5" marker-end="url(#arr)" stroke-dasharray="3 2"/>
+
+          <!-- ── Mesh Layer ── -->
+          <rect x="180" y="364" width="200" height="96" rx="10" fill="#1a1200" stroke="#5a3e00" stroke-width="0.5"/>
+          <text x="195" y="381" font-family="Syne,sans-serif" font-size="10" fill="#d29922" font-weight="600" opacity="0.8">MESH LAYER</text>
+
+          <rect x="192" y="388" width="80" height="60" rx="6" fill="#0d1117" stroke="#d29922" stroke-width="0.8"/>
+          <text x="232" y="406" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="700" fill="#d29922">Zenoh</text>
+          <text x="232" y="419" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">router</text>
+          <text x="232" y="431" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">:7447</text>
+          <text x="232" y="441" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">REST :8000</text>
+
+          <rect x="286" y="388" width="82" height="60" rx="6" fill="#0d1117" stroke="#3fb950" stroke-width="0.8"/>
+          <text x="327" y="406" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="700" fill="#3fb950">Bridge</text>
+          <text x="327" y="419" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">Go service</text>
+          <text x="327" y="431" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">metrics :9090</text>
+          <text x="327" y="441" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#3fb950">✦ key piece</text>
+
+          <!-- Bridge ↔ Zenoh -->
+          <line x1="272" y1="418" x2="285" y2="418" stroke="#d29922" stroke-width="0.8" marker-end="url(#arr)"/>
+          <line x1="285" y1="425" x2="272" y2="425" stroke="#3fb950" stroke-width="0.8" marker-end="url(#arr)"/>
+
+          <!-- Bridge → Catalog -->
+          <line x1="327" y1="388" x2="295" y2="340" stroke="#3fb950" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#arr)"/>
+
+          <!-- Bridge → IPFS (CID check) -->
+          <path d="M 327 388 Q 320 350 310 340" fill="none" stroke="#3fb950" stroke-width="0.5" stroke-dasharray="3 2" opacity="0.5" marker-end="url(#arr)"/>
+
+          <!-- Vertical connector Storage → Mesh -->
+          <line x1="280" y1="350" x2="280" y2="386" stroke="#30363d" stroke-width="0.5" stroke-dasharray="3 2" opacity="0.5"/>
+
+          <!-- ── Remote peers ── -->
+          <rect x="510" y="200" width="150" height="160" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="0.5"/>
+          <text x="585" y="220" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" fill="#7d8590" font-weight="600">REMOTE PEERS</text>
+
+          <rect x="520" y="232" width="130" height="44" rx="6" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+          <text x="585" y="251" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" fill="#c9d1d9">Node B</text>
+          <text x="585" y="264" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">IPFS + Zenoh + Bridge</text>
+
+          <rect x="520" y="288" width="130" height="44" rx="6" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+          <text x="585" y="307" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" fill="#c9d1d9">Node C</text>
+          <text x="585" y="320" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">IPFS + Zenoh + Bridge</text>
+
+          <!-- Zenoh ↔ Remote peers (gossip) -->
+          <path d="M 272 418 Q 400 440 510 320" fill="none" stroke="#d29922" stroke-width="0.8" stroke-dasharray="4 3" marker-end="url(#arr)" opacity="0.6"/>
+          <path d="M 510 280 Q 400 300 272 430" fill="none" stroke="#d29922" stroke-width="0.8" stroke-dasharray="4 3" marker-end="url(#arr)" opacity="0.4"/>
+
+          <!-- Workers → IPFS (data retrieval) -->
+          <path d="M 408 108 Q 450 200 380 300" fill="none" stroke="#39c5cf" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#arr)" opacity="0.4"/>
+
+          <!-- Legend -->
+          <line x1="20" y1="410" x2="40" y2="410" stroke="#58a6ff" stroke-width="1" marker-end="url(#arr)"/>
+          <text x="46" y="413" font-family="Syne,sans-serif" font-size="10" fill="#7d8590">SQL / discovery</text>
+          <line x1="20" y1="428" x2="40" y2="428" stroke="#3fb950" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr)"/>
+          <text x="46" y="431" font-family="Syne,sans-serif" font-size="10" fill="#7d8590">Bridge sync</text>
+          <line x1="20" y1="446" x2="40" y2="446" stroke="#d29922" stroke-width="0.8" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+          <text x="46" y="449" font-family="Syne,sans-serif" font-size="10" fill="#7d8590">Zenoh gossip</text>
+          <line x1="20" y1="464" x2="40" y2="464" stroke="#39c5cf" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#arr)"/>
+          <text x="46" y="467" font-family="Syne,sans-serif" font-size="10" fill="#7d8590">IPFS data fetch</text>
+
+        </svg>
+        <p class="diagram-caption">System overview — 7 pods, 19 Kubernetes resources, one Helm install</p>
+      </div>
+    </div>
+
+    <!-- Query Flow Diagram -->
+    <div class="section">
+      <div class="section-title">Query Execution Flow</div>
+      <div class="diagram-wrap">
+        <svg width="100%" viewBox="0 0 680 440">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Participants -->
+          <rect x="20"  y="20" width="72" height="28" rx="5" fill="#0c1f3a" stroke="#1f6feb" stroke-width="0.5"/>
+          <text x="56"  y="38" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="600" fill="#58a6ff">Client</text>
+
+          <rect x="120" y="20" width="90" height="28" rx="5" fill="#0c1f3a" stroke="#1f6feb" stroke-width="0.5"/>
+          <text x="165" y="38" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="600" fill="#58a6ff">Trino Coord.</text>
+
+          <rect x="238" y="20" width="90" height="28" rx="5" fill="#160d24" stroke="#a371f7" stroke-width="0.5"/>
+          <text x="283" y="38" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="600" fill="#a371f7">REST Catalog</text>
+
+          <rect x="356" y="20" width="80" height="28" rx="5" fill="#0c1f3a" stroke="#388bfd" stroke-width="0.5"/>
+          <text x="396" y="38" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="600" fill="#58a6ff">Workers</text>
+
+          <rect x="462" y="20" width="72" height="28" rx="5" fill="#0a1e24" stroke="#1d6170" stroke-width="0.5"/>
+          <text x="498" y="38" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="600" fill="#39c5cf">IPFS</text>
+
+          <rect x="560" y="20" width="100" height="28" rx="5" fill="#0a1e24" stroke="#1d6170" stroke-width="0.5"/>
+          <text x="610" y="38" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" font-weight="600" fill="#39c5cf">Remote Node</text>
+
+          <!-- Lifelines -->
+          <line x1="56"  y1="48" x2="56"  y2="430" stroke="#1f6feb" stroke-width="0.3" stroke-dasharray="3 3" opacity="0.3"/>
+          <line x1="165" y1="48" x2="165" y2="430" stroke="#1f6feb" stroke-width="0.3" stroke-dasharray="3 3" opacity="0.3"/>
+          <line x1="283" y1="48" x2="283" y2="430" stroke="#a371f7" stroke-width="0.3" stroke-dasharray="3 3" opacity="0.3"/>
+          <line x1="396" y1="48" x2="396" y2="430" stroke="#388bfd" stroke-width="0.3" stroke-dasharray="3 3" opacity="0.3"/>
+          <line x1="498" y1="48" x2="498" y2="430" stroke="#39c5cf" stroke-width="0.3" stroke-dasharray="3 3" opacity="0.3"/>
+          <line x1="610" y1="48" x2="610" y2="430" stroke="#39c5cf" stroke-width="0.3" stroke-dasharray="3 3" opacity="0.3"/>
+
+          <!-- Note: Background sync -->
+          <rect x="380" y="58" width="280" height="20" rx="4" fill="#1a1200" stroke="#d29922" stroke-width="0.5"/>
+          <text x="520" y="72" text-anchor="middle" font-family="Syne,sans-serif" font-size="10" fill="#d29922">Background: bridge syncs partition map via Zenoh every 30s</text>
+
+          <!-- Step 1: SQL query -->
+          <line x1="56" y1="96" x2="160" y2="96" stroke="#58a6ff" stroke-width="1" marker-end="url(#arr2)"/>
+          <text x="108" y="90" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#58a6ff">SELECT * FROM iceberg.energy.readings</text>
+          <text x="108" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#58a6ff">WHERE ts &gt; '2026-01-01'</text>
+
+          <!-- Step 2: Catalog lookup -->
+          <line x1="165" y1="116" x2="278" y2="116" stroke="#a371f7" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="222" y="112" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#a371f7">GET /v1/namespaces/energy/tables/readings</text>
+
+          <!-- Step 3: Catalog returns partition map -->
+          <line x1="283" y1="134" x2="170" y2="134" stroke="#a371f7" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr2)"/>
+          <text x="222" y="130" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">partition map (local + remote CIDs)</text>
+
+          <!-- Step 4: Plan with pruning -->
+          <rect x="130" y="148" width="70" height="22" rx="4" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+          <text x="165" y="163" text-anchor="middle" font-family="Syne,sans-serif" font-size="9" fill="#7d8590">Prune partitions</text>
+
+          <!-- Step 5: Dispatch workers -->
+          <line x1="165" y1="178" x2="391" y2="178" stroke="#388bfd" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="278" y="174" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#388bfd">Schedule splits (local + CID: bafyrei...)</text>
+
+          <!-- Step 6: Worker fetches local split -->
+          <rect x="361" y="192" width="70" height="20" rx="4" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+          <text x="396" y="206" text-anchor="middle" font-family="Syne,sans-serif" font-size="9" fill="#7d8590">Read local Parquet</text>
+
+          <!-- Step 7: Worker requests remote CID from IPFS -->
+          <line x1="396" y1="220" x2="493" y2="220" stroke="#39c5cf" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="445" y="216" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#39c5cf">GET /ipfs/bafyrei-nodeB-part1</text>
+
+          <!-- Step 8: IPFS fetches from remote peer -->
+          <line x1="498" y1="236" x2="605" y2="236" stroke="#39c5cf" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="552" y="232" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">P2P block fetch</text>
+
+          <!-- Step 9: Remote returns block -->
+          <line x1="610" y1="252" x2="503" y2="252" stroke="#39c5cf" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr2)"/>
+          <text x="556" y="248" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">Parquet data block</text>
+
+          <!-- Step 10: IPFS returns to worker -->
+          <line x1="498" y1="268" x2="401" y2="268" stroke="#39c5cf" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr2)"/>
+          <text x="450" y="264" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">Parquet file bytes</text>
+
+          <!-- Step 11: Worker returns partial result -->
+          <line x1="396" y1="288" x2="170" y2="288" stroke="#388bfd" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr2)"/>
+          <text x="283" y="284" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#388bfd">Partial result set</text>
+
+          <!-- Step 12: Merge and return -->
+          <rect x="130" y="302" width="70" height="20" rx="4" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+          <text x="165" y="316" text-anchor="middle" font-family="Syne,sans-serif" font-size="9" fill="#7d8590">Merge &amp; sort</text>
+
+          <!-- Step 13: Return to client -->
+          <line x1="165" y1="330" x2="61" y2="330" stroke="#3fb950" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#arr2)"/>
+          <text x="113" y="326" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#3fb950">Merged result ✓</text>
+
+          <!-- Step numbers -->
+          <circle cx="68" cy="96" r="7" fill="#1f6feb"/>
+          <text x="68" y="99" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" font-weight="700" fill="white">1</text>
+          <circle cx="176" cy="116" r="7" fill="#6e40c9"/>
+          <text x="176" y="119" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" font-weight="700" fill="white">2</text>
+          <circle cx="176" cy="178" r="7" fill="#1f6feb"/>
+          <text x="176" y="181" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" font-weight="700" fill="white">3</text>
+          <circle cx="406" cy="220" r="7" fill="#1d6170"/>
+          <text x="406" y="223" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" font-weight="700" fill="white">4</text>
+          <circle cx="68" cy="330" r="7" fill="#1a5c2a"/>
+          <text x="68" y="333" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" font-weight="700" fill="white">5</text>
+
+          <!-- Time axis -->
+          <line x1="14" y1="88" x2="14" y2="340" stroke="#30363d" stroke-width="0.5"/>
+          <text x="10" y="90" text-anchor="middle" font-family="Syne,sans-serif" font-size="8" fill="#7d8590" transform="rotate(-90 10 200)">time</text>
+          <polygon points="14,338 11,328 17,328" fill="#30363d"/>
+
+        </svg>
+        <p class="diagram-caption">Query execution sequence — SQL → plan → splits → IPFS P2P fetch → merged result</p>
+      </div>
+    </div>
+
+    <!-- Bridge Sync Loop -->
+    <div class="section">
+      <div class="section-title">Bridge Sync Loop</div>
+      <div class="diagram-wrap">
+        <svg width="100%" viewBox="0 0 680 320">
+          <defs>
+            <marker id="arr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Start -->
+          <rect x="290" y="20" width="100" height="32" rx="16" fill="#1a5c2a" stroke="#3fb950" stroke-width="0.8"/>
+          <text x="340" y="40" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="600" fill="#3fb950">Bridge tick</text>
+
+          <!-- Publish phase -->
+          <line x1="340" y1="52" x2="340" y2="76" stroke="#3fb950" stroke-width="0.8" marker-end="url(#arr3)"/>
+
+          <rect x="220" y="76" width="240" height="34" rx="6" fill="#0d1117" stroke="#3fb950" stroke-width="0.5"/>
+          <text x="340" y="96" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="600" fill="#c9d1d9">List local namespaces &amp; tables</text>
+          <text x="340" y="108" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">Iceberg REST Catalog → GET /v1/namespaces</text>
+
+          <line x1="340" y1="110" x2="340" y2="134" stroke="#3fb950" stroke-width="0.8" marker-end="url(#arr3)"/>
+
+          <rect x="220" y="134" width="240" height="34" rx="6" fill="#0d1117" stroke="#d29922" stroke-width="0.8"/>
+          <text x="340" y="154" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="600" fill="#d29922">PUT partition map → Zenoh</text>
+          <text x="340" y="166" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">iceberg/partitions/ns/table/part/nodeID</text>
+
+          <!-- Sync phase -->
+          <line x1="340" y1="168" x2="340" y2="192" stroke="#d29922" stroke-width="0.8" marker-end="url(#arr3)"/>
+
+          <rect x="220" y="192" width="240" height="34" rx="6" fill="#0d1117" stroke="#d29922" stroke-width="0.5"/>
+          <text x="340" y="212" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="600" fill="#c9d1d9">GET remote announcements ← Zenoh</text>
+          <text x="340" y="224" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7d8590">iceberg/partitions/ns/table/**</text>
+
+          <!-- Decision diamond -->
+          <line x1="340" y1="226" x2="340" y2="250" stroke="#39c5cf" stroke-width="0.8" marker-end="url(#arr3)"/>
+
+          <polygon points="340,254 300,272 340,290 380,272" fill="#0d1117" stroke="#39c5cf" stroke-width="0.8"/>
+          <text x="340" y="274" text-anchor="middle" font-family="Syne,sans-serif" font-size="9" fill="#39c5cf">CID reachable?</text>
+
+          <!-- No path -->
+          <line x1="300" y1="272" x2="140" y2="272" stroke="#f47067" stroke-width="0.8" marker-end="url(#arr3)"/>
+          <text x="220" y="266" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#f47067">no</text>
+          <rect x="80" y="258" width="60" height="28" rx="6" fill="#0d1117" stroke="#f47067" stroke-width="0.5"/>
+          <text x="110" y="272" text-anchor="middle" font-family="Syne,sans-serif" font-size="9" fill="#f47067">reject + log</text>
+          <text x="110" y="283" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">rejected++</text>
+
+          <!-- Yes path -->
+          <line x1="380" y1="272" x2="520" y2="272" stroke="#3fb950" stroke-width="0.8" marker-end="url(#arr3)"/>
+          <text x="450" y="266" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#3fb950">yes</text>
+          <rect x="520" y="258" width="130" height="28" rx="6" fill="#0d1117" stroke="#3fb950" stroke-width="0.8"/>
+          <text x="585" y="272" text-anchor="middle" font-family="Syne,sans-serif" font-size="9" fill="#3fb950">Register into catalog</text>
+          <text x="585" y="283" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7d8590">registered++</text>
+
+          <!-- Back to start (loop arrow) -->
+          <path d="M 110 258 Q 60 200 60 60 Q 60 20 290 20" fill="none" stroke="#30363d" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#arr3)" opacity="0.5"/>
+          <text x="44" y="145" font-family="Syne,sans-serif" font-size="9" fill="#7d8590" text-anchor="middle" transform="rotate(-90 44 145)">30s interval</text>
+
+          <path d="M 650 272 Q 660 140 650 20 Q 640 8 560 20 Q 460 20 390 36" fill="none" stroke="#30363d" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#arr3)" opacity="0.5"/>
+
+        </svg>
+        <p class="diagram-caption">Bridge runs every 30s: publish local → pull remote → verify CID → register valid partitions</p>
+      </div>
+    </div>
+
+    <!-- Quick Start -->
+    <div class="section">
+      <div class="section-title">Quick Start</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Clone &amp; build the bridge image</div>
+            <div class="code-block"><span class="kw">git</span> clone https://github.com/optimusdb/iceberg-decentralized.git<br>cd iceberg-decentralized/bridge<br><span class="kw">docker</span> build -t optimusdb/zenoh-iceberg-bridge:0.1.0 .<br><span class="cm"># K3s: import directly without a registry</span><br><span class="kw">docker</span> save optimusdb/zenoh-iceberg-bridge:0.1.0 | k3s ctr images import -</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Install with Helm</div>
+            <div class="code-block"><span class="kw">helm</span> install iceberg-decentralized . \<br>  --namespace iceberg-decentralized \<br>  --create-namespace \<br>  --wait</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Run your first decentralized query</div>
+            <div class="code-block"><span class="kw">trino</span> --server http://&lt;node-ip&gt;:30080<br><br><span class="cm">-- Create a schema</span><br><span class="kw">CREATE SCHEMA</span> iceberg.energy <span class="kw">WITH</span> (location = <span class="str">'/iceberg-warehouse/energy'</span>);<br><br><span class="cm">-- Create a partitioned table</span><br><span class="kw">CREATE TABLE</span> iceberg.energy.readings (<br>  ts <span class="var">TIMESTAMP</span>, node_id <span class="var">VARCHAR</span>, value <span class="var">DOUBLE</span><br>) <span class="kw">WITH</span> (format = <span class="str">'PARQUET'</span>, partitioning = <span class="str">ARRAY['day(ts)']</span>);<br><br><span class="cm">-- Query across nodes transparently</span><br><span class="kw">SELECT</span> * <span class="kw">FROM</span> iceberg.energy.readings <span class="kw">WHERE</span> ts &gt; <span class="str">TIMESTAMP '2026-01-01'</span>;</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-info">
+        <div class="alert-title">Note</div>
+        Remote partitions from peer nodes appear automatically within 30 seconds of the bridge's first sync cycle — no manual registration needed.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Stats</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num">19</div>
+          <div class="stat-lbl">K8s Resources</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num">7</div>
+          <div class="stat-lbl">Pod types</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num">486</div>
+          <div class="stat-lbl">Bridge LOC</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num">0</div>
+          <div class="stat-lbl">Go deps</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">File Tree</div>
+      <div class="file-tree">
+        <span class="dir">iceberg-decentralized/</span><br>
+        ├── <span class="yaml">Chart.yaml</span><br>
+        ├── <span class="yaml">values.yaml</span><br>
+        ├── <span class="md">README.md</span><br>
+        ├── LICENSE<br>
+        ├── <span class="dir">bridge/</span><br>
+        │&nbsp;&nbsp; ├── <span class="go">main.go</span><br>
+        │&nbsp;&nbsp; ├── go.mod<br>
+        │&nbsp;&nbsp; └── Dockerfile<br>
+        └── <span class="dir">templates/</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── namespace.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── ipfs.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── zenoh.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── iceberg-volume.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── iceberg-rest-catalog.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── trino-configmaps.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── trino-coordinator.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; ├── trino-worker.yaml<br>
+        &nbsp;&nbsp;&nbsp;&nbsp; └── bridge.yaml
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Stack Versions</div>
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 2;">
+        <span style="color:var(--blue)">Trino</span> 435<br>
+        <span style="color:var(--purple)">Iceberg REST</span> 0.10.0<br>
+        <span style="color:var(--teal)">IPFS Kubo</span> 0.26.0<br>
+        <span style="color:var(--amber)">Zenoh</span> 0.11.0<br>
+        <span style="color:var(--green)">Go bridge</span> 0.1.0
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Roadmap</div>
+      <div style="font-size: 12px; color: var(--muted); line-height: 2;">
+        ☐ IPFS-native FileIO<br>
+        ☐ Multi-node value overlays<br>
+        ☐ OPA access control<br>
+        ☐ Grafana dashboard<br>
+        ☐ Arm64 Docker image<br>
+        ☐ OptimusDB integration
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Research</div>
+      <div style="font-size: 11px; color: var(--muted); line-height: 1.7;">
+        Part of the OptimusDB research stack.<br><br>
+        AUEB / ICCS-NTUA<br>
+        Swarmchestrate Project<br>
+        Grant #101135012 (WP3/T3.3)
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+</body>
+</html>
