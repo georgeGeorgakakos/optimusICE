@@ -1,0 +1,208 @@
+# ══════════════════════════════════════════════════════════════
+# OptimusDB / iceberg-decentralized  —  NODE-C
+# Node ID : node-gamma
+# ══════════════════════════════════════════════════════════════
+#
+# Host ports:
+#   Trino SQL      : 8280
+#   Iceberg catalog: 8381
+#   IPFS API       : 5201
+#   IPFS Gateway   : 9088
+#   Zenoh protocol : 7647  (peered to other nodes via iceberg-mesh)
+#   Zenoh REST     : 8200
+#   Bridge metrics : 9290
+
+networks:
+  iceberg-net-c:
+    driver: bridge
+    name: iceberg-net-c
+  iceberg-mesh:
+    external: true
+
+volumes:
+  ipfs-data-node-c:
+    name: ipfs-data-node-c
+  warehouse-node-c:
+    name: warehouse-node-c
+
+services:
+
+  # ── 1. IPFS ───────────────────────────────────
+  ipfs-node:
+    image: ipfs/kubo:v0.26.0
+    container_name: iceberg-ipfs-node-c
+    restart: unless-stopped
+    environment:
+      IPFS_PATH: /data/ipfs
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ipfs init --profile=server 2>/dev/null || true
+        ipfs config Addresses.API /ip4/0.0.0.0/tcp/5001
+        ipfs config Addresses.Gateway /ip4/0.0.0.0/tcp/8080
+        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin "[\"*\"]"
+        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods "[\"PUT\",\"POST\",\"GET\"]"
+        ipfs config --json API.HTTPHeaders.Access-Control-Allow-Headers "[\"Authorization\"]"
+        exec ipfs daemon --migrate=true --enable-gc
+    ports:
+      - "5201:5001"
+      - "4201:4001"
+      - "9088:8080"
+    volumes:
+      - ipfs-data-node-c:/data/ipfs
+    networks:
+      - iceberg-net-c
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ── 2. Zenoh Router ───────────────────────────
+  # Peers to the other two nodes via the shared iceberg-mesh network
+  zenoh:
+    image: eclipse/zenoh:0.11.0
+    container_name: iceberg-zenoh-node-c
+    restart: unless-stopped
+    command:
+      - "--rest-http-port"
+      - "8000"
+      - "--connect"
+      - "tcp/iceberg-zenoh-node-a:7447"
+      - "--connect"
+      - "tcp/iceberg-zenoh-node-b:7447"
+    ports:
+      - "7647:7447"
+      - "8200:8000"
+    networks:
+      - iceberg-net-c
+      - iceberg-mesh
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/@/router/local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── 3. Iceberg Catalog ────────────────────────
+  iceberg-catalog:
+    image: tabulario/iceberg-rest:0.10.0
+    container_name: iceberg-catalog-node-c
+    restart: unless-stopped
+    environment:
+      CATALOG_WAREHOUSE: /iceberg-warehouse
+      CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
+    ports:
+      - "8381:8181"
+    volumes:
+      - warehouse-node-c:/iceberg-warehouse
+    networks:
+      - iceberg-net-c
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8181/v1/config"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ── 4. Trino Coordinator ──────────────────────
+  trino-coordinator:
+    image: trinodb/trino:435
+    container_name: iceberg-trino-coordinator-node-c
+    restart: unless-stopped
+    depends_on:
+      iceberg-catalog:
+        condition: service_started
+    ports:
+      - "8280:8080"
+    volumes:
+      - ./config/coordinator/config.properties:/etc/trino/config.properties:ro
+      - ./config/coordinator/jvm.config:/etc/trino/jvm.config:ro
+      - ./config/coordinator/node.properties:/etc/trino/node.properties:ro
+      - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+      - warehouse-node-c:/iceberg-warehouse
+    networks:
+      - iceberg-net-c
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 120s
+
+  # ── 5. Trino Worker 1 ─────────────────────────
+  trino-worker-1:
+    image: trinodb/trino:435
+    container_name: iceberg-trino-worker1-node-c
+    restart: unless-stopped
+    depends_on:
+      trino-coordinator:
+        condition: service_started
+    volumes:
+      - ./config/worker/config.properties:/etc/trino/config.properties:ro
+      - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
+      - ./config/worker/node.properties:/etc/trino/node.properties:ro
+      - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+      - warehouse-node-c:/iceberg-warehouse
+    networks:
+      - iceberg-net-c
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 120s
+
+  # ── 6. Trino Worker 2 ─────────────────────────
+  trino-worker-2:
+    image: trinodb/trino:435
+    container_name: iceberg-trino-worker2-node-c
+    restart: unless-stopped
+    depends_on:
+      trino-coordinator:
+        condition: service_started
+    volumes:
+      - ./config/worker/config.properties:/etc/trino/config.properties:ro
+      - ./config/worker/jvm.config:/etc/trino/jvm.config:ro
+      - ./config/worker/node.properties:/etc/trino/node.properties:ro
+      - ./config/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+      - warehouse-node-c:/iceberg-warehouse
+    networks:
+      - iceberg-net-c
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 120s
+
+  # ── 7. Bridge ─────────────────────────────────
+  bridge:
+    image: optimusdb/zenoh-iceberg-bridge:0.1.0
+    container_name: iceberg-bridge-node-c
+    restart: unless-stopped
+    depends_on:
+      zenoh:
+        condition: service_started
+      iceberg-catalog:
+        condition: service_started
+      ipfs-node:
+        condition: service_started
+    environment:
+      ZENOH_ENDPOINT: "tcp/zenoh:7447"
+      CATALOG_ENDPOINT: "http://iceberg-catalog:8181"
+      IPFS_API: "http://ipfs-node:5001"
+      SYNC_INTERVAL_SECONDS: "30"
+      NODE_ID: "node-gamma"
+      METRICS_PORT: "9090"
+    ports:
+      - "9290:9090"
+    networks:
+      - iceberg-net-c
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9090"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
